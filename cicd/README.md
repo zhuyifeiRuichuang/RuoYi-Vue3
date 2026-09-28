@@ -17,7 +17,7 @@
 - **零镜像 / 零加速**：`setup-node` 的 `registry-url` 强制指向 `https://registry.npmjs.org`，不使用任何镜像 / 中国加速。
 - **最新基础软件**：Node 22 LTS；基础镜像 `nginx:1.27-alpine`（官方、多架构）。
 - **多架构**：`build-images-frontend` 通过 buildx + QEMU 构建 `linux/amd64,linux/arm64`，并关闭 provenance 以消除 `unknown/unknown` 冗余 tag。
-- **部署测试**：`deploy-test` 提供 docker compose 与 kind 两种 amd64 环境验证。
+- **部署测试**：`deploy-test` 提供 docker compose 与 kind 两种 amd64 环境验证。由于前端 nginx 配置要求存在 `ruoyi-gateway` upstream，部署测试会同时启动一个返回 200 的 mock 网关，避免 nginx 因解析不到 upstream 而启动失败。
 - **不动上游代码结构**：新增文件仅在 `.github/workflows/` 与 `cicd/`，未改动源码与 `src/` 等。
 
 ## 推荐执行顺序（与 RuoYi-Cloud 配合）
