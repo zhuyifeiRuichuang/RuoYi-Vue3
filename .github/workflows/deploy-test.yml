@@ -1,0 +1,112 @@
+name: Deploy Test (RuoYi-Vue3)
+
+# 全手动触发：输入已发布的镜像版本号，在 amd64 环境下分别验证 docker compose 与标准 k8s 部署
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version tag, e.g. dev-3.9.2 (must already exist in ghcr.io)'
+        required: true
+        default: 'dev-3.9.2'
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  VERSION: ${{ inputs.version }}
+  IMAGE: ghcr.io/zhuyifeiruichuang/ruoyi-vue3/ruoyi-web
+
+jobs:
+  docker-compose-test:
+    name: Docker Compose (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and start frontend with docker compose
+        run: |
+          docker compose -f cicd/docker-compose.test.yml pull ruoyi-web
+          docker compose -f cicd/docker-compose.test.yml up -d
+          docker compose -f cicd/docker-compose.test.yml ps
+
+      - name: Wait for container healthy
+        run: |
+          for i in $(seq 1 18); do
+            code=$(docker inspect --format='{{.State.Health.Status}}' ruoyi-web 2>/dev/null || echo "starting")
+            echo "Health status: $code"
+            [ "$code" = "healthy" ] && exit 0
+            sleep 5
+          done
+          echo "Container did not become healthy"
+          docker logs ruoyi-web || true
+          exit 1
+
+      - name: Smoke test (HTTP 200 on /)
+        run: |
+          curl -sf --retry 10 --retry-delay 2 --retry-connrefused http://localhost:8080/ -o /tmp/index.html
+          echo "HTTP 200 OK, page size: $(wc -c < /tmp/index.html) bytes"
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f cicd/docker-compose.test.yml down --volumes
+
+  k8s-test:
+    name: Standard Kubernetes (kind, amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ruoyi-vue3-test
+          wait_for_ready: 120s
+
+      - name: Pull image on host and load into kind
+        run: |
+          docker pull "${IMAGE}:${VERSION}"
+          kind load docker-image "${IMAGE}:${VERSION}" --name ruoyi-vue3-test
+
+      - name: Apply frontend manifest (inject version)
+        run: |
+          sed -i "s|__VERSION__|${VERSION}|g" cicd/k8s/frontend-test.yaml
+          kubectl apply -f cicd/k8s/frontend-test.yaml
+          kubectl rollout status deployment/ruoyi-web -n ruoyi-vue3-test --timeout=180s
+          kubectl get pods -n ruoyi-vue3-test -o wide
+
+      - name: Smoke test via port-forward (HTTP 200 on /)
+        run: |
+          kubectl port-forward svc/ruoyi-web -n ruoyi-vue3-test 8080:80 &
+          PF_PID=$!
+          sleep 5
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:8080/ -o /tmp/index.html; then
+              echo "HTTP 200 OK, page size: $(wc -c < /tmp/index.html) bytes"
+              kill $PF_PID || true
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Smoke test failed"
+          kubectl logs -n ruoyi-vue3-test -l app=ruoyi-web --tail=50 || true
+          kill $PF_PID || true
+          exit 1
+
+      - name: Tear down
+        if: always()
+        run: kind delete cluster --name ruoyi-vue3-test || true
