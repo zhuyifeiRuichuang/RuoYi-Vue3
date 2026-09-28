@@ -37,23 +37,23 @@ jobs:
           docker compose -f cicd/docker-compose.test.yml up -d
           docker compose -f cicd/docker-compose.test.yml ps
 
-      - name: Wait for container healthy
+      - name: Wait for HTTP 200 on frontend
         run: |
-          for i in $(seq 1 18); do
-            code=$(docker inspect --format='{{.State.Health.Status}}' ruoyi-web 2>/dev/null || echo "starting")
-            echo "Health status: $code"
-            [ "$code" = "healthy" ] && exit 0
-            sleep 5
+          # 不依赖容器内 healthcheck（nginx:1.27-alpine 运行镜像内 wget 可能缺失，
+          # 且 localhost 可能解析到 IPv6 而 nginx 仅监听 IPv4）。采用与 k8s job 一致、
+          # 已被验证可用的 runner 侧 HTTP 探测。
+          for i in $(seq 1 30); do
+            if curl -sf --retry 5 --retry-delay 2 --retry-connrefused http://localhost:8080/ -o /tmp/index.html; then
+              echo "HTTP 200 OK, page size: $(wc -c < /tmp/index.html) bytes"
+              exit 0
+            fi
+            echo "Waiting for frontend (attempt $i)..."
+            sleep 3
           done
-          echo "Container did not become healthy"
+          echo "Frontend did not become reachable on :8080"
           docker logs ruoyi-web || true
           docker logs ruoyi-gateway || true
           exit 1
-
-      - name: Smoke test (HTTP 200 on /)
-        run: |
-          curl -sf --retry 10 --retry-delay 2 --retry-connrefused http://localhost:8080/ -o /tmp/index.html
-          echo "HTTP 200 OK, page size: $(wc -c < /tmp/index.html) bytes"
 
       - name: Tear down
         if: always()
