@@ -1,0 +1,48 @@
+name: Release Frontend (RuoYi-Vue3)
+
+# 全手动触发：在 Actions 页手动运行并填写版本号（不含 v 前缀）
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. 3.9.2 (no leading v)'
+        required: true
+        default: '3.9.2'
+
+permissions:
+  contents: write   # 创建 Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 使用 Node 22 LTS，并强制 npm registry 指向官方 npmjs.org（不使用任何镜像/中国加速）
+      - name: Set up Node 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify npm registry (no mirror)
+        run: npm config get registry
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build (production)
+        run: npm run build:prod
+
+      - name: Package dist
+        run: cd dist && zip -r ../ruoyi-web-dist.zip . && cd ..
+
+      - name: Create GitHub Release and upload dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "RuoYi-Vue3 v${{ inputs.version }}" \
+            --notes "Automated release of RuoYi-Vue3 frontend build (version ${{ inputs.version }})." \
+            ruoyi-web-dist.zip
