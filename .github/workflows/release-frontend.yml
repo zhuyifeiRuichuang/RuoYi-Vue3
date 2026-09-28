@@ -1,13 +1,13 @@
 name: Release Frontend (RuoYi-Vue3)
 
-# 全手动触发：在 Actions 页手动运行并填写版本号（不含 v 前缀）
+# 全手动触发：在 Actions 页手动运行并填写版本号，发布 Tag 与输入完全一致
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, e.g. 3.9.2 (no leading v)'
+        description: 'Release version tag, e.g. dev-3.9.2 (used exactly as-is)'
         required: true
-        default: '3.9.2'
+        default: 'dev-3.9.2'
 
 permissions:
   contents: write   # 创建 Release
@@ -41,8 +41,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ inputs.version }}" \
+          gh release create "${{ inputs.version }}" \
             --repo "${{ github.repository }}" \
-            --title "RuoYi-Vue3 v${{ inputs.version }}" \
+            --title "RuoYi-Vue3 ${{ inputs.version }}" \
             --notes "Automated release of RuoYi-Vue3 frontend build (version ${{ inputs.version }})." \
             ruoyi-web-dist.zip

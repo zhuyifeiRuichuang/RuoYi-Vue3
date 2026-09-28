@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version must match the existing Release tag vX.Y.Z, e.g. 3.9.2'
+        description: 'Version must match the existing Release tag exactly, e.g. dev-3.9.2'
         required: true
-        default: '3.9.2'
+        default: 'dev-3.9.2'
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p artifacts
-          gh release download "v${{ inputs.version }}" -D artifacts --repo "${{ github.repository }}"
+          gh release download "${{ inputs.version }}" -D artifacts --repo "${{ github.repository }}"
           unzip -o artifacts/ruoyi-web-dist.zip -d dist
 
       - name: Set up QEMU (arm64 emulation)
@@ -47,6 +47,7 @@ jobs:
             --file cicd/docker/frontend/Dockerfile \
             --tag "${IMAGE}:${{ inputs.version }}" \
             --tag "${IMAGE}:latest" \
+            --provenance=false \
             --push .
 
       - name: Make package public (best-effort)
@@ -54,4 +55,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api --method PUT "/user/packages/container/ruoyi-web/visibility" -f visibility=public || true
+          gh api --method PUT "/user/packages/container/ruoyi-vue3%2Fruoyi-web/visibility" -f visibility=public || true

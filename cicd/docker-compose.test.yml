@@ -1,0 +1,12 @@
+services:
+  ruoyi-web:
+    image: ghcr.io/zhuyifeiruichuang/ruoyi-vue3/ruoyi-web:${VERSION:-latest}
+    container_name: ruoyi-web
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
