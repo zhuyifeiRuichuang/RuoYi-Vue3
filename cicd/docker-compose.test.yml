@@ -4,9 +4,20 @@ services:
     container_name: ruoyi-web
     ports:
       - "8080:80"
+    depends_on:
+      ruoyi-gateway:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
       interval: 10s
       timeout: 5s
       retries: 6
       start_period: 5s
+
+  # 前端 nginx 配置要求存在 ruoyi-gateway upstream；部署测试仅验证前端本身，
+  # 因此使用一个总是返回 200 的 mock 网关，避免 nginx 因解析不到 upstream 而启动失败。
+  ruoyi-gateway:
+    image: nginx:1.27-alpine
+    container_name: ruoyi-gateway
+    volumes:
+      - ./docker/nginx/mock-gateway.conf:/etc/nginx/conf.d/default.conf:ro
