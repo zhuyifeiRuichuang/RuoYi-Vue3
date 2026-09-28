@@ -27,7 +27,7 @@ jobs:
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ghcr.io.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -47,6 +47,7 @@ jobs:
           done
           echo "Container did not become healthy"
           docker logs ruoyi-web || true
+          docker logs ruoyi-gateway || true
           exit 1
 
       - name: Smoke test (HTTP 200 on /)
@@ -86,6 +87,7 @@ jobs:
         run: |
           sed -i "s|__VERSION__|${VERSION}|g" cicd/k8s/frontend-test.yaml
           kubectl apply -f cicd/k8s/frontend-test.yaml
+          kubectl rollout status deployment/ruoyi-gateway -n ruoyi-vue3-test --timeout=120s
           kubectl rollout status deployment/ruoyi-web -n ruoyi-vue3-test --timeout=180s
           kubectl get pods -n ruoyi-vue3-test -o wide
 
@@ -104,6 +106,7 @@ jobs:
           done
           echo "Smoke test failed"
           kubectl logs -n ruoyi-vue3-test -l app=ruoyi-web --tail=50 || true
+          kubectl logs -n ruoyi-vue3-test -l app=ruoyi-gateway --tail=50 || true
           kill $PF_PID || true
           exit 1
 
